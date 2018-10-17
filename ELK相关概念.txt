@@ -1,0 +1,234 @@
+Elasticsearch配置说明：
+    配置文件路径：
+        - /usr/local/etc/elasticsearch/
+    elasticsearch.yml关键配置：
+        - cluster.name 集群名，以此判断是否是同一集群
+        - node.name 节点名，以此作为集群中不同节点的区分条件
+        - network.host/http.port 网络地址和端口
+        - path.data 数据存储地址
+        - path.log 日志存储地址
+    Dev与Prod模式：
+        - 以transport地址是否绑定在localhost为判断标准 network.host
+        - Dev模式下在启动时会以warning方式提示配置检查异常
+        - Prod模式下在启动时会以error方式提示配置检查异常并退出
+    通过命令修改参数：
+        - bin/elasticsearch -Ehttp.port=19200
+    本地快速启动集群：
+        - bin/elasticsearch 
+        - bin/elasticsearch -Ehttp.port=8200 -Epath.data=node2
+        - bin/elasticsearch -Ehttp.port=7200 -Epath.data=node3
+    查看集群和节点
+        - http://localhost:9200/_cat/nodes
+        - http://localhost:9200/_cat/nodes?v
+
+Kibana配置说明：
+    配置文件路径：
+        - /usr/local/etc/kibana/
+    kibana关键配置：
+        - server.host/server.port 访问kibana用的地址和端口
+        - elasticsearch.url 待访问elasticsearch的地址
+    常用功能：
+        - Discover 数据搜索查看
+        - Visualize 图标制作
+        - Dashboard 仪表盘制作
+        - Timelion 时序数据的高级可视化分析
+        - DevTools 开发者工具
+        - Management 配置管理
+
+Elasticsearch常用术语：
+    - Document 文档数据 单条数据
+    - Index 索引 类似于Mysql中的数据库
+    - Type 索引中的数据类型
+    - Field 字段 文档的属性
+    - Query DSL ES的查询语言 
+
+Elasticsearch的CRUD操作：
+    - Create：
+        account是Index, person是Type, 创建Id为1的文档, 文档内容是Json
+        POST /account/person/1
+        {
+            "name": "John",
+            "lastname": "Doe",
+            "job_description": "Systems admin"
+        }
+        返回结果：
+        {
+            "_index": "account",
+            "_type": "person",
+            "_id": "1",
+            "_version": 1,
+            "result": "created",
+            "_shards": {
+                "total": 2,
+                "successful": 1,
+                "failed": 0
+            },
+            "_seq_no": 1,
+            "_primary_term": 1
+        }
+
+    - Get:
+        GET /accounts/person/1
+        返回结果：
+        {
+            "_index": "account",
+            "_type": "person",
+            "_id": "1",
+            "_version": 2,
+            "found": true,
+            "_source": {
+              "name": "John",
+              "lastname": "Doe",
+              "job_description": "Systems admin"
+            }
+        }
+    - Update:
+        POST /account/person/1/_update
+        {
+            "doc": {
+                "job_description": "System admin and specialist"
+            }
+        }
+    - Delete:
+        DELETE /account/person/1
+        DELETE /account
+        返回结果：
+        {
+            "_index": "account",
+            "_type": "person",
+            "_id": "1",
+            "_version": 5,
+            "result": "deleted",
+            "_shards": {
+              "total": 2,
+              "successful": 1,
+              "failed": 0
+            },
+            "_seq_no": 4,
+            "_primary_term": 1
+        }
+
+Elasticsearch查询：
+    Query String:
+        GET /account/person/_search?q=john
+    Query DSL:
+        GET /account/person/_search
+        {
+            "query": {
+                "match": {
+                    "name": "john"
+                }
+            }
+        }
+
+Beats简介
+    Lightweight Data Shipper轻量级数据传输
+        - Filebeat 日志文件
+        - Metricbeat 度量数据
+        - Packetbeat 网络数据
+        - Winlogbeat Windows数据
+        - Heartbeat 数据检查
+    Filebeat:
+        处理流程：
+            - 输入 input
+            - 处理 filter
+            - 输出 output
+            Prospector: 探测文件
+            Harvester: 收集数据发送到输出
+            可以有多个prospector, 针对不同的日志文件
+        Input配置文件：yaml语法
+            input_type有两个类型，log和stdin
+            filebeat.prospertors:
+              - input_type: log
+                paths:
+                  - /var/log/...
+              - input_type: log
+                paths:
+                  - /var/log/messages
+                  - /var/log/*.log
+        Output配置：
+            支持输出：Console, ES, Logstash, Kafka, Redis, File
+            output.elasticsearch
+                hosts: ["..."]
+                username: ""
+                password: ""
+            output.console:
+                pretty: true
+        Filter配置：
+            - Input时处理：
+                - include_lines
+                - exclude_lines
+                - exclude_files
+            - Output前处理 -- processor
+                - drop_event
+                - drop_fields
+                - decode_json_fields
+                - include_fields
+        Filebeat + ES Ingest Node:
+            Filebeat缺乏数据转换能力
+            ES Ingest Node
+                - 新增node类型
+                - 在数据写入ES前对数据进行处理转换
+                - pipeline api
+        Filebeat Module:
+            对社区中常见需求进行封装
+                - nginx
+                - apache
+                - mysql
+            封装内容：
+                - filebeat.yml配置
+                - ingest node pipeline
+                - kibana dashboard
+    Packetbeat
+        实时网络抓包
+        解析ES http请求：
+            packetbeat.interfaces.device: lo0
+            packetbeat.protocols.http: ports: [9200]
+            send_request: true
+            include_body_for: ["application/json", "x-www-form-urlencoded"]
+            output.console:
+                pretty: true
+
+Logstash简介：
+    Data Shipper
+        - ETL: Extract Transform Load
+    处理流程：
+        - 输入 input
+            - file redis beats kafka
+        - 处理 filter
+            - grok: 非格式化数据转换成格式化数据
+            - mutate: 对结构化之后的数据进行增删改查CRUD
+            - drop
+            - date
+        - 输出 output
+            - stdout
+            - ES
+            - redis
+            - kafka
+    输入输出配置
+        input {file {path => ""}}
+        output {stdout {codec => rubydebug}}
+    Filter配置
+        - Grok:
+            基于正则表达式提供了丰富的可重用的模型
+            可以把非结构化数据转化成结构化数据
+        - Date:
+            把字符串类型的时间字段转化成时间戳类型
+        - Mutate:
+            CRUD
+        - ...
+
+实践方案：
+    - Packetbeat + Logstash 实现数据收集工作
+    - Kibana + Elasticsearch 实现数据分析工作
+
+
+
+
+
+
+
+
+
+
+
